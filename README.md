@@ -20,7 +20,7 @@ $ mpic++ recommendationSystem.cpp -o recommendationSystem
 The executable file **recommendationSystem** is the main application functionality, you can run the example by typing the following command:
 
 ```sh
-$ mpirun -np 4 recommendationSystem matrixUI.txt matrixSR.txt matrixRecMovs.txt
+$ mpirun -np 4 recommendationSystem matrixUI.txt matrixSR.txt matrixRecMovs.txt nrow ncol recoomendationPerUser
 ```
 
 After running the command, two new files will be generated, *matrixSR.txt* will contain the users who have similar preferences for each user in decreasing order. And the *matrixRecMovs.txt* contains the most recommended movies for each user.
