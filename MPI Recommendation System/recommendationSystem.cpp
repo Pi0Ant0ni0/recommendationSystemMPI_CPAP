@@ -687,7 +687,7 @@ main(int argc, char *argv[]) {
     int numeroDiProcessi = atoi(argv[7]);
 
     if (taskId == MASTER) {
-        if (argc != 7) {
+        if (argc != 8) {
             printf("USAGE: recommendationSystem [matrixUI_file_name] [matrixSR_file_name] [matrixRecMovs_file_name] ");
             printf("[number_of_movies] [number_of_users] [number_of_recommendations_wanted]\n");
             MPE_Finish_log("test");
