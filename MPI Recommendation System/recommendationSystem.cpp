@@ -77,7 +77,9 @@ printMatrixLocs() {
     printf("Recommended movies matrix was output in: %s\n", matrixRecMovsFile);
     printf("\n");
 }
-
+/**
+ * stampa su file
+ * */
 void
 copyToFOut() {
     string fOutSR(matrixSRFile);
@@ -110,7 +112,13 @@ nextWorker() {
         currentWorker = 1;
     }
 }
-
+/**
+ * per ogni utente
+ * si contattano i worker per ricevere
+ * il vettore di correlazione utente-utente
+ * il vettore  utente movies
+ * e crea la matrice utente-movies
+ * */
 void
 receiveRecUsersAndMoviesFromWorkers() {
     currentWorker = 0;
@@ -208,7 +216,12 @@ sortCorrelations() {
 
     }
 }
-
+/**
+ *
+ * riceve le correlazionie
+ * potrebbe fare un inserimento ordinato e ordinarle direttamente qua
+ * aumenterebbe la concorrenza
+ * */
 void
 receiveCorrColumnsFromMaster() {
     int a; //Índice del usuario base.
@@ -241,7 +254,10 @@ receiveCorrColumnsFromMaster() {
 
     }
 }
-
+/**per ogni utente invia ad anello
+ * ai worker l'utente  e le sue correlazioni con gli altri
+ * finisce lo stream con -1
+ * */
 void
 sendCorrColumnsToWorkers() {
     currentWorker = 0;
@@ -306,6 +322,9 @@ receiveCorrValuesFromWorkers() {
     currentWorker = 0;
 }
 
+/**
+ * Potrebbe essere chiamato nella receive indexes
+ * */
 void
 processCorrelations() {
     double *averages = new double[users];
@@ -439,7 +458,11 @@ processCorrelations() {
 
     }
 }
-
+/**
+ * riceve coppie fino alla fine dello stream
+ * e tra una receive e l'altra crea oggetto correlazione ma non calcola
+ * la potrebbe calcolare qua
+ * */
 void
 receiveUsersIndexesFromMaster() {
     int a; //Índice del usuario base.
@@ -660,6 +683,7 @@ int
 main(int argc, char *argv[]) {
 
     initMPI(argc, argv);
+    double startTime = MPI_Wtime();
 
     if (taskId == MASTER) {
         if (argc != 7) {
@@ -678,7 +702,7 @@ main(int argc, char *argv[]) {
         }
 
         //Iniciamos cronómetro.
-        double startTime = MPI_Wtime();
+
         matrixSRFile = argv[2];
         matrixRecMovsFile = argv[3];
         movies = atoi(argv[4]);
@@ -717,10 +741,6 @@ main(int argc, char *argv[]) {
         //Imprimir resultado en el archivo de salida.
         copyToFOut();
 
-        //Paramos el cronómetro.
-        double endTime = MPI_Wtime();
-
-        printf("Total execution time: %f s.\n", endTime - startTime);
     } else {
 
         if (argc != 7) {
@@ -751,7 +771,14 @@ main(int argc, char *argv[]) {
         sortCorrelations();
     }
 
+    //Paramos el cronómetro.
+    double endTime = MPI_Wtime();
     MPE_Finish_log("test");
     MPI_Finalize();
+
+    if(taskId == MASTER){
+        printf("Total execution time: %f s.\n", endTime - startTime);
+
+    }
     return 0;
 }
