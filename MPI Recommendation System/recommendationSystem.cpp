@@ -30,6 +30,7 @@ int BROADCAST_START, BROADCAST_END, SEND_START, SEND_END, RECEIVE_START, RECEIVE
 int taskId, numTasks, numWorkers, currentWorker = 0;
 MPI_Status status;
 MPI_Request request;
+MPI_Datatype correlation_type;
 
 /*Variables propias*/
 int movies, users, recommendations;
@@ -312,7 +313,7 @@ receiveCorrValuesFromWorkers() {
         Correlation correlation;
 
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPI_Recv(&correlation, 1, correlation_type, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(SEND_END, 0, NULL);
 
         /*
@@ -725,12 +726,11 @@ void define_mpi_data_types() {
 
 }
 
-MPI_Datatype correlation_type;
-
 int
 main(int argc, char *argv[]) {
 
     initMPI(argc, argv);
+    define_mpi_data_types();
     double startTime = MPI_Wtime();
 
     if (taskId == MASTER) {
@@ -830,3 +830,5 @@ main(int argc, char *argv[]) {
     }
     return 0;
 }
+
+
