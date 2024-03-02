@@ -684,20 +684,19 @@ main(int argc, char *argv[]) {
 
     initMPI(argc, argv);
     double startTime = MPI_Wtime();
-    int numeroDiProcessi = atoi(argv[7]);
 
     if (taskId == MASTER) {
         if (argc != 8) {
             printf("USAGE: recommendationSystem [matrixUI_file_name] [matrixSR_file_name] [matrixRecMovs_file_name] ");
             printf("[number_of_movies] [number_of_users] [number_of_recommendations_wanted]\n");
-            MPE_Finish_log("test");
+            MPE_Finish_log(argv[7]);
             MPI_Finalize();
             return 0;
         }
 
         if (atoi(argv[6]) > atoi(argv[4])) {
             printf("Movies to recommend for each user should be less than or equals to %d.\n", atoi(argv[4]));
-            MPE_Finish_log("test");
+            MPE_Finish_log(argv[7]);
             MPI_Finalize();
             return 0;
         }
@@ -744,14 +743,14 @@ main(int argc, char *argv[]) {
 
     } else {
 
-        if (argc != 7) {
-            MPE_Finish_log("test");
+        if (argc != 8) {
+            MPE_Finish_log(argv[7]);
             MPI_Finalize();
             return 0;
         }
 
         if (atoi(argv[6]) > atoi(argv[4])) {
-            MPE_Finish_log("test");
+            MPE_Finish_log(argv[7]);
             MPI_Finalize();
             return 0;
         }
@@ -774,8 +773,7 @@ main(int argc, char *argv[]) {
 
     //Paramos el cronómetro.
     double endTime = MPI_Wtime();
-    string clogFile = "recommendation_np_" + to_string(numeroDiProcessi);
-    MPE_Finish_log(clogFile);
+    MPE_Finish_log(argv[7]);
     MPI_Finalize();
 
     if(taskId == MASTER){
