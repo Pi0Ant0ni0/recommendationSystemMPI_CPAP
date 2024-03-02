@@ -43,11 +43,16 @@ double *userACorrs;
 int **matrixUIInW;
 
 /*Variables para almacenamiento temporal en los workers*/
+
+
 struct Correlation {
     int a;
     int u;
+    double correlationAu;
 
-    Correlation(int userA, int userU) : a(userA), u(userU) {}
+    Correlation() : a(0), u(0), correlationAu(0) {}
+
+    Correlation(int userA, int userU, double corrAU) : a(userA), u(userU), correlationAu(corrAU) {}
 };
 
 queue<Correlation> corrToProc;
@@ -302,6 +307,15 @@ receiveCorrValuesFromWorkers() {
     int a, u;
     double corrValue;
     for (int i = 0; i < combinatorialFactor; ++i) {
+
+        //RICEZIONE DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
+        Correlation correlation;
+
+        MPE_Log_event(SEND_START, 0, NULL);
+        MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPE_Log_event(SEND_END, 0, NULL);
+
+        /*
         MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&a, 1, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
@@ -313,9 +327,10 @@ receiveCorrValuesFromWorkers() {
         MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&corrValue, 1, MPI_DOUBLE, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
+        */
 
-        userUserMatrix[a][u] = corrValue;
-        userUserMatrix[u][a] = corrValue;
+        userUserMatrix[correlation.a][correlation.u] = correlation.correlationAu;
+        userUserMatrix[correlation.u][correlation.a] = correlation.correlationAu;
         //printf("Corr (%d, %d) = %f\n", a, u, corrValue);
         nextWorker();
     }
@@ -444,6 +459,15 @@ processCorrelations() {
 
         //Calcular el valor de correlación entre ambos usuarios.
         double corrBtwAandU = numerator / denominator;
+
+        correlation.correlationAu = corrBtwAandU;
+
+        //INVIO DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
+        MPE_Log_event(SEND_START, 0, NULL);
+        MPI_Send(&correlation, 1, correlation_type, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPE_Log_event(SEND_END, 0, NULL);
+
+        /*
         MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
         MPE_Log_event(SEND_END, 0, NULL);
@@ -455,6 +479,7 @@ processCorrelations() {
         MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&corrBtwAandU, 1, MPI_DOUBLE, MASTER, FROM_WORKER, MPI_COMM_WORLD);
         MPE_Log_event(SEND_END, 0, NULL);
+        */
 
     }
 }
@@ -478,7 +503,7 @@ receiveUsersIndexesFromMaster() {
 
 
         //Correlation correlation = Correlation (a, u, userARatingsInW, userURatingsInW);
-        Correlation correlation = Correlation(a, u);
+        Correlation correlation = Correlation(a, u, 0);
         corrToProc.push(correlation);
 
         //Pedir otro índice de usuario para procesar otra tarea.
@@ -501,6 +526,7 @@ void
 sendUsersIndexesToWorkers() {
     currentWorker = 0;
     nextWorker();
+
     int a, u;
     for (int i = 0; i < users; ++i) {
         for (int j = i + 1; j < users; ++j) {
@@ -678,6 +704,28 @@ initMPI(int argc, char *argv[]) {
 //argv 4 - movies.
 //argv 5 - users.
 //argv 6 - recommendations.
+
+void define_mpi_data_types() {
+    // Create the datatype
+    int lengths[3] = { 1, 1, 1};
+    MPI_Aint displacements[3];
+    Correlation dummy_correlation;
+    MPI_Aint base_address;
+    MPI_Get_address(&dummy_correlation, &base_address);
+    MPI_Get_address(&dummy_correlation.a, &displacements[0]);
+    MPI_Get_address(&dummy_correlation.u, &displacements[1]);
+    MPI_Get_address(&dummy_correlation.correlationAu, &displacements[2]);
+    displacements[0] = MPI_Aint_diff(displacements[0], base_address);
+    displacements[1] = MPI_Aint_diff(displacements[1], base_address);
+    displacements[2] = MPI_Aint_diff(displacements[2], base_address);
+
+    MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_DOUBLE };
+    MPI_Type_create_struct(3, lengths, displacements, types, &correlation_type);
+    MPI_Type_commit(&correlation_type);
+
+}
+
+MPI_Datatype correlation_type;
 
 int
 main(int argc, char *argv[]) {
