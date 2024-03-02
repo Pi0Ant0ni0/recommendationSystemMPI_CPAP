@@ -23,9 +23,8 @@
 using namespace std;
 
 
-
 // Define events
-int BROADCAST_START,BROADCAST_END, SEND_START,SEND_END,RECEIVE_START,RECEIVE_END;
+int BROADCAST_START, BROADCAST_END, SEND_START, SEND_END, RECEIVE_START, RECEIVE_END;
 
 /*Variables de MPI*/
 int taskId, numTasks, numWorkers, currentWorker = 0;
@@ -34,8 +33,8 @@ MPI_Request request;
 
 /*Variables propias*/
 int movies, users, recommendations;
-int **matrixUI;
-double **matrixCorr;
+int **utilityMatrix;
+double **userUserMatrix;
 int combinatorialFactor = 0; //Determinará la cantidad de valores 
 //de correlación que recibirá el master.
 double *userACorrs;
@@ -64,9 +63,9 @@ queue<Sort> corrToSort;
 
 /*Vector, matriz y archivos resultado*/
 int *vectorSR;
-int **matrixSR;
+int **recommendationPerUser;
 int *vectorRecMovies;
-int **matrixRecMovies;
+int **userPerRecommendation;
 char *matrixSRFile;
 char *matrixRecMovsFile;
 
@@ -88,14 +87,14 @@ copyToFOut() {
 
     for (int i = 0; i < recommendations; ++i) {
         for (int j = 0; j < users; ++j) {
-            fileStreamOutSR << matrixSR[i][j] << " ";
+            fileStreamOutSR << recommendationPerUser[i][j] << " ";
         }
         fileStreamOutSR << endl;
     }
 
     for (int i = 0; i < users; ++i) {
         for (int j = 0; j < recommendations; ++j) {
-            fileStreamOutRecMov << matrixRecMovies[i][j] << " ";
+            fileStreamOutRecMov << userPerRecommendation[i][j] << " ";
         }
         fileStreamOutRecMov << endl;
     }
@@ -122,20 +121,20 @@ receiveRecUsersAndMoviesFromWorkers() {
         MPI_Recv(&a, 1, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
 
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&vectorSR[0], recommendations, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
         for (int j = 0; j < recommendations; ++j) {
             //Se ordenan los usuarios más similares al usuario a en su columna.
-            matrixSR[j][a] = vectorSR[j];
+            recommendationPerUser[j][a] = vectorSR[j];
         }
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&vectorRecMovies[0], recommendations, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
         for (int k = 0; k < recommendations; ++k) {
             //Se ordenan las películas a recomendar a ese usuario por filas para facilitar su lectura.
-            matrixRecMovies[a][k] = vectorRecMovies[k];
+            userPerRecommendation[a][k] = vectorRecMovies[k];
         }
         nextWorker();
     }
@@ -195,17 +194,17 @@ sortCorrelations() {
             }
             moviesToRecToA[i] = uMovieToRecA;
         }
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&recUsers[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&moviesToRecToA[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
     }
 }
@@ -215,16 +214,16 @@ receiveCorrColumnsFromMaster() {
     int a; //Índice del usuario base.
     double *userACorrValues;
     pair<double, int> corrAndUser;
-   MPE_Log_event(RECEIVE_START, 0, NULL);
+    MPE_Log_event(RECEIVE_START, 0, NULL);
     MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-   MPE_Log_event(RECEIVE_END, 0, NULL);
+    MPE_Log_event(RECEIVE_END, 0, NULL);
 
     while (a != -1) {
         vector<pair<double, int> > corrsVector;
         userACorrValues = new double[users];
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&userACorrValues[0], users, MPI_DOUBLE, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
         for (int i = 0; i < users; ++i) {
             //Se guarda el coeficiente de correlación acompañado de su usuario asociado.
@@ -236,9 +235,9 @@ receiveCorrColumnsFromMaster() {
         corrToSort.push(corrSort);
 
         //Pedir otro índice de usuario para procesar otra tarea.
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
     }
 }
@@ -250,16 +249,16 @@ sendCorrColumnsToWorkers() {
     int a;
     for (int i = 0; i < users; ++i) {
         a = i;  //Índice del usuario a.
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
         for (int j = 0; j < users; ++j) {
-            userACorrs[j] = matrixCorr[j][a];
+            userACorrs[j] = userUserMatrix[j][a];
         }
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&userACorrs[0], users, MPI_DOUBLE, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
         nextWorker();
     }
@@ -267,9 +266,9 @@ sendCorrColumnsToWorkers() {
     int finishCode = -1; //Sirve para indicar a los workers que ya
     //se finalizó con el envío de tareas.
     for (int i = 1; i <= numWorkers; ++i) {
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&finishCode, 1, MPI_INT, i, FROM_MASTER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
     }
     currentWorker = 0;
@@ -282,20 +281,20 @@ receiveCorrValuesFromWorkers() {
     int a, u;
     double corrValue;
     for (int i = 0; i < combinatorialFactor; ++i) {
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&a, 1, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&u, 1, MPI_INT, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&corrValue, 1, MPI_DOUBLE, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
-        matrixCorr[a][u] = corrValue;
-        matrixCorr[u][a] = corrValue;
+        userUserMatrix[a][u] = corrValue;
+        userUserMatrix[u][a] = corrValue;
         //printf("Corr (%d, %d) = %f\n", a, u, corrValue);
         nextWorker();
     }
@@ -421,17 +420,17 @@ processCorrelations() {
 
         //Calcular el valor de correlación entre ambos usuarios.
         double corrBtwAandU = numerator / denominator;
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&u, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&corrBtwAandU, 1, MPI_DOUBLE, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
     }
 }
@@ -440,14 +439,14 @@ void
 receiveUsersIndexesFromMaster() {
     int a; //Índice del usuario base.
     int u; //Índice del otro usuario.
-   MPE_Log_event(RECEIVE_START, 0, NULL);
+    MPE_Log_event(RECEIVE_START, 0, NULL);
     MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-   MPE_Log_event(RECEIVE_END, 0, NULL);
+    MPE_Log_event(RECEIVE_END, 0, NULL);
 
     while (a != -1) {
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&u, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
 
         //Correlation correlation = Correlation (a, u, userARatingsInW, userURatingsInW);
@@ -455,9 +454,9 @@ receiveUsersIndexesFromMaster() {
         corrToProc.push(correlation);
 
         //Pedir otro índice de usuario para procesar otra tarea.
-       MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-       MPE_Log_event(RECEIVE_END, 0, NULL);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
 
     }
 }
@@ -471,13 +470,13 @@ sendUsersIndexesToWorkers() {
         for (int j = i + 1; j < users; ++j) {
             a = i;  //Índice del usuario a.
             u = j;  //Índice del usuario u.
-           MPE_Log_event(SEND_START, 0, NULL);
+            MPE_Log_event(SEND_START, 0, NULL);
             MPI_Send(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-           MPE_Log_event(SEND_END, 0, NULL);
+            MPE_Log_event(SEND_END, 0, NULL);
 
-           MPE_Log_event(SEND_START, 0, NULL);
+            MPE_Log_event(SEND_START, 0, NULL);
             MPI_Send(&u, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-           MPE_Log_event(SEND_END, 0, NULL);
+            MPE_Log_event(SEND_END, 0, NULL);
 
             combinatorialFactor++;
             nextWorker();
@@ -486,9 +485,9 @@ sendUsersIndexesToWorkers() {
 
     int finishCode = -1; //Sirve para indicar a los workers que ya se finalizó con el envío de tareas.
     for (int i = 1; i <= numWorkers; ++i) {
-       MPE_Log_event(SEND_START, 0, NULL);
+        MPE_Log_event(SEND_START, 0, NULL);
         MPI_Send(&finishCode, 1, MPI_INT, i, FROM_MASTER, MPI_COMM_WORLD);
-       MPE_Log_event(SEND_END, 0, NULL);
+        MPE_Log_event(SEND_END, 0, NULL);
 
     }
     currentWorker = 0;
@@ -496,17 +495,17 @@ sendUsersIndexesToWorkers() {
 
 void
 receiveDataFromMaster() {
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&movies, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&users, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&recommendations, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
 
     matrixUIInW = new int *[movies];
@@ -515,9 +514,9 @@ receiveDataFromMaster() {
     }
     int *linearMatrixUIInW;
     linearMatrixUIInW = new int[movies * users];
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&linearMatrixUIInW[0], movies * users, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
     for (int i = 0; i < movies; ++i) {
         for (int j = 0; j < users; ++j) {
@@ -528,28 +527,28 @@ receiveDataFromMaster() {
 
 void
 sendDataToWorkers() {
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&movies, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&users, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&recommendations, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
 
     int *linearMatrixUI = new int[movies * users];
     for (int i = 0; i < movies; ++i) {
         for (int j = 0; j < users; ++j) {
-            linearMatrixUI[(users * i) + j] = matrixUI[i][j];
+            linearMatrixUI[(users * i) + j] = utilityMatrix[i][j];
         }
     }
-   MPE_Log_event(BROADCAST_START, 0, NULL);
+    MPE_Log_event(BROADCAST_START, 0, NULL);
     MPI_Bcast(&linearMatrixUI[0], movies * users, MPI_INT, MASTER, MPI_COMM_WORLD);
-   MPE_Log_event(BROADCAST_END, 0, NULL);
+    MPE_Log_event(BROADCAST_END, 0, NULL);
 
 }
 
@@ -567,7 +566,7 @@ openFiles(char *fileNameMatrixUI) {
             string rating;
             while (getline(ssFileStreamMatUI, rating, ' ')) {
                 j++;
-                matrixUI[i][j] = atoi(rating.c_str());
+                utilityMatrix[i][j] = atoi(rating.c_str());
             }
             j = -1;
             i++;
@@ -580,35 +579,35 @@ openFiles(char *fileNameMatrixUI) {
 
 void
 initMatricesAndResponseMat() {
-    matrixUI = new int *[movies];
+    utilityMatrix = new int *[movies];
     for (int i = 0; i < movies; ++i) {
-        matrixUI[i] = new int[users];
+        utilityMatrix[i] = new int[users];
     }
 
-    matrixCorr = new double *[users];
+    userUserMatrix = new double *[users];
     for (int i = 0; i < users; ++i) {
-        matrixCorr[i] = new double[users];
+        userUserMatrix[i] = new double[users];
     }
 
     //Se hace para asegurarse de que en la diagonal queden valores -infinitos.
     for (int j = 0; j < users; ++j) {
-        matrixCorr[j][j] = NEG_INFINITY;
+        userUserMatrix[j][j] = NEG_INFINITY;
     }
 
     userACorrs = new double[users];
 
     vectorSR = new int[recommendations];
 
-    matrixSR = new int *[recommendations];
+    recommendationPerUser = new int *[recommendations];
     for (int i = 0; i < recommendations; ++i) {
-        matrixSR[i] = new int[users];
+        recommendationPerUser[i] = new int[users];
     }
 
     vectorRecMovies = new int[recommendations];
 
-    matrixRecMovies = new int *[users];
+    userPerRecommendation = new int *[users];
     for (int i = 0; i < users; ++i) {
-        matrixRecMovies[i] = new int[recommendations];
+        userPerRecommendation[i] = new int[recommendations];
     }
 }
 
@@ -632,8 +631,8 @@ initMPI(int argc, char *argv[]) {
 
     if (taskId == 0) {
         MPE_Describe_state(BROADCAST_START, BROADCAST_END, "Broadcast", "red:vlines3");
-        MPE_Describe_state(SEND_START, SEND_END, "Send",   "blue:gray3");
-        MPE_Describe_state(RECEIVE_START, RECEIVE_END, "Receive",    "green:light_gray");
+        MPE_Describe_state(SEND_START, SEND_END, "Send", "blue:gray3");
+        MPE_Describe_state(RECEIVE_START, RECEIVE_END, "Receive", "green:light_gray");
     }
 }
 
@@ -677,13 +676,13 @@ main(int argc, char *argv[]) {
         //Inicializar las películas y usuarios de la matrizUI.
         initMatricesAndResponseMat();
 
-        //Abrir el archivo que contiene matrixUI.
+        //Abrir el archivo que contiene utilityMatrix.
         openFiles(argv[1]);
 
         //Enviar a los workers los datos de movies y users.
         sendDataToWorkers();
 
-        //Enviar las columnas de matrixUI a los workers.
+        //Enviar las columnas de utilityMatrix a los workers.
         sendUsersIndexesToWorkers();
 
         /*En este punto ya los workers empezaron a procesar y a enviar resultados parciales

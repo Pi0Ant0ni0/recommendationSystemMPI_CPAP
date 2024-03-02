@@ -7,7 +7,7 @@ The project was mainly developed using the [Open MPI] version 1.8.4 and [C++].
 To generate a random matrix in order to execute and test the application a utility was developed, its name is **genRandomMatUI.cpp**, you can run it as the following example:
 
 ```sh
-$ ./genRandomMatUI 100 100 matrixUI.txt
+$ ./genRandomMatUI 100 100 utilityMatrix.txt
 ```
 The command above will generate a 100 by 100 matrix.
 
@@ -20,10 +20,10 @@ $ mpic++ recommendationSystem.cpp -o recommendationSystem
 The executable file **recommendationSystem** is the main application functionality, you can run the example by typing the following command:
 
 ```sh
-$ mpirun -np 4 recommendationSystem matrixUI.txt matrixSR.txt matrixRecMovs.txt nrow ncol recoomendationPerUser
+$ mpirun -np 4 recommendationSystem utilityMatrix.txt recommendationPerUser.txt matrixRecMovs.txt nrow ncol recoomendationPerUser
 ```
 
-After running the command, two new files will be generated, *matrixSR.txt* will contain the users who have similar preferences for each user in decreasing order. And the *matrixRecMovs.txt* contains the most recommended movies for each user.
+After running the command, two new files will be generated, *recommendationPerUser.txt* will contain the users who have similar preferences for each user in decreasing order. And the *matrixRecMovs.txt* contains the most recommended movies for each user.
 
 ## Querying
 

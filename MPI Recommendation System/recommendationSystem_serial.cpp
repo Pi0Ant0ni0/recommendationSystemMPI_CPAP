@@ -19,17 +19,17 @@ using namespace std;
 
 /*Variables propias*/
 int movies, users, recommendations;
-int **matrixUI;
-double **matrixCorr;
+int **utilityMatrix;
+double **userUserMatrix;
 double *averages;
 double *corrTerms;
 double *userACorrs;
 
 /*Vector, matriz y archivos resultado*/
 int *vectorSR;
-int **matrixSR;
+int **recommendationPerUser;
 int *vectorRecMovies;
-int **matrixRecMovies;
+int **userPerRecommendation;
 char *matrixSRFile;
 char *matrixRecMovsFile;
 
@@ -50,7 +50,7 @@ copyToFOut () {
 
   for (int i = 0; i < recommendations; ++i) {
     for (int j = 0; j < users; ++j) {
-      fileStreamOutSR << matrixSR[i][j] << " ";
+      fileStreamOutSR << recommendationPerUser[i][j] << " ";
     }
     fileStreamOutSR << endl;
   }
@@ -65,7 +65,7 @@ getVectorRecMovies(int a, int *recUsers) {
   for (int i = 0; i < recommendations; ++i) {
     vector < pair<int,int> > recUserRatings;
     for (int j = 0; j < movies; ++j) {
-      ratingAndMovie = make_pair(matrixUI[j][recUsers[i]], j);
+      ratingAndMovie = make_pair(utilityMatrix[j][recUsers[i]], j);
       recUserRatings.push_back(ratingAndMovie);
     }
     sort(recUserRatings.rbegin(), recUserRatings.rend()); //Ordena de mayor a menor
@@ -81,7 +81,7 @@ getVectorRecMovies(int a, int *recUsers) {
         //Solo se ingresa si el usuario que recomienda tiene 
         //rating asociado a esa película.
         int movieToRec = recUserRatings[k].second;
-        if (matrixUI[movieToRec][a] == 0) {
+        if (utilityMatrix[movieToRec][a] == 0) {
           uMovieToRecA = movieToRec;
           foundMovieToRec = true;
           continueRecommending = false;
@@ -130,7 +130,7 @@ calculateSRAndRecMovMat() {
     vector <pair <double, int> > corrsVector;
     a = i;  //Índice del usuario a.
     for (int j = 0; j < users; ++j) {
-      corrAndUser = make_pair(matrixCorr[j][a], j);
+      corrAndUser = make_pair(userUserMatrix[j][a], j);
       corrsVector.push_back(corrAndUser);
     }
     vectorSR = getVectorSR(corrsVector);
@@ -139,12 +139,12 @@ calculateSRAndRecMovMat() {
     
     for (int k = 0; k < recommendations; ++k) {
       //Se ordenan los usuarios más similares al usuario a en su columna.
-      matrixSR[k][a] = vectorSR[k];
+      recommendationPerUser[k][a] = vectorSR[k];
     }
     /*
     for (int l = 0; l < recommendations; ++l) {
       //Se ordenan las películas a recomendar a ese usuario por filas para facilitar su lectura.
-      matrixRecMovies[a][l] = vectorRecMovies[l];
+      userPerRecommendation[a][l] = vectorRecMovies[l];
     }
     */
 
@@ -255,7 +255,7 @@ calculateCorrMat() {
         userARatings = usersRatings[a];
       } else {
           for (int k = 0; k < movies; ++k) {
-            userARatings[k] = matrixUI[k][a];
+            userARatings[k] = utilityMatrix[k][a];
           }
           usersRatings[a] = userARatings;
       }
@@ -264,14 +264,14 @@ calculateCorrMat() {
         userURatings = usersRatings[u];
       } else {
           for (int k = 0; k < movies; ++k) {
-            userURatings[k] = matrixUI[k][u];
+            userURatings[k] = utilityMatrix[k][u];
           }
           usersRatings[u] = userURatings;
       }
 
       corrAU = calcCorrBtWAU(a, u, userARatings, userURatings);
-      matrixCorr[a][u] = corrAU;
-      matrixCorr[u][a] = corrAU;
+        userUserMatrix[a][u] = corrAU;
+        userUserMatrix[u][a] = corrAU;
       //printf("Corr (%d, %d) = %f\n", a, u, corrAU);
     } 
   }
@@ -291,7 +291,7 @@ openFiles(char *fileNameMatrixUI) {
       string rating;
       while (getline(ssFileStreamMatUI, rating, ' ')) {
         j++;
-        matrixUI[i][j] = atoi(rating.c_str());
+          utilityMatrix[i][j] = atoi(rating.c_str());
       }
       j = -1;
       i++;
@@ -304,19 +304,19 @@ openFiles(char *fileNameMatrixUI) {
 
 void
 initMatricesAndResponseMat() {
-  matrixUI = new int *[movies];
+    utilityMatrix = new int *[movies];
   for (int i = 0; i < movies; ++i) {
-    matrixUI[i] = new int[users];
+      utilityMatrix[i] = new int[users];
   }
 
-  matrixCorr = new double *[users];
+    userUserMatrix = new double *[users];
   for (int i = 0; i < users; ++i) {
-    matrixCorr[i] = new double[users];
+      userUserMatrix[i] = new double[users];
   }
 
   //Se hace para asegurarse de que en la diagonal queden valores -infinitos.
   for (int j = 0; j < users; ++j) {
-    matrixCorr[j][j] = NEG_INFINITY;
+      userUserMatrix[j][j] = NEG_INFINITY;
   }
 
   //Para optimizar procesamiento de los coeficientes de correlación entre dos usuarios.
@@ -334,16 +334,16 @@ initMatricesAndResponseMat() {
 
   vectorSR = new int[recommendations];
 
-  matrixSR = new int *[recommendations];
+    recommendationPerUser = new int *[recommendations];
   for (int i = 0; i < recommendations; ++i) {
-    matrixSR[i] = new int[users];
+      recommendationPerUser[i] = new int[users];
   }
 
   vectorRecMovies = new int[recommendations];
 
-  matrixRecMovies = new int *[users];
+    userPerRecommendation = new int *[users];
   for (int i = 0; i < users; ++i) {
-    matrixRecMovies[i] = new int[recommendations];
+      userPerRecommendation[i] = new int[recommendations];
   }
 }
 
@@ -382,7 +382,7 @@ main(int argc, char *argv[]) {
   //Inicializar las películas y usuarios de la matrizUI.
   initMatricesAndResponseMat();
 
-  //Abrir el archivo que contiene matrixUI.
+  //Abrir el archivo que contiene utilityMatrix.
   openFiles(argv[1]);
 
   //Calcular la matriz de correlación.
