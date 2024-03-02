@@ -684,6 +684,7 @@ main(int argc, char *argv[]) {
 
     initMPI(argc, argv);
     double startTime = MPI_Wtime();
+    int numeroDiProcessi = atoi(argv[7]);
 
     if (taskId == MASTER) {
         if (argc != 7) {
@@ -773,7 +774,8 @@ main(int argc, char *argv[]) {
 
     //Paramos el cronómetro.
     double endTime = MPI_Wtime();
-    MPE_Finish_log("test");
+    string clogFile = "recommendation_np_" + to_string(numeroDiProcessi);
+    MPE_Finish_log(clogFile);
     MPI_Finalize();
 
     if(taskId == MASTER){
