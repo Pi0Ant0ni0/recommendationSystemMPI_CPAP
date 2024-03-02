@@ -273,7 +273,12 @@ sendCorrColumnsToWorkers() {
     }
     currentWorker = 0;
 }
-
+/**
+ * il master riceve n^2/2
+ * riceve in ordine i valori a,u, e la correlazione
+ * si puo rendere il tutto asincrono e fare una riceive bloccante
+ * con un tipo piu complesso che ha user a,u e correlazione
+ * */
 void
 receiveCorrValuesFromWorkers() {
     currentWorker = 0;
@@ -460,7 +465,15 @@ receiveUsersIndexesFromMaster() {
 
     }
 }
-
+/**
+ * Manda tutte le possibili coppie di utenti
+ * a tutti per calcolare
+ * n^2/2
+ * i worker sono ad anello gli vengono assegnati i vari valori
+ * con -1 finisce lo stream
+ * potrebbero essere non bloccanti?
+ *
+ * */
 void
 sendUsersIndexesToWorkers() {
     currentWorker = 0;
