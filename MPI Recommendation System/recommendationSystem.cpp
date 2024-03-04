@@ -484,6 +484,130 @@ processCorrelations() {
 
     }
 }
+void
+ newProcessCorrelation(Correlation correlation, map<int, int *>& usersRatings, int* userARatings, int* userURatings,double* averages,double* corrTerms){
+
+
+    int a = correlation.a;
+    int u = correlation.u;
+
+    if (usersRatings.count(a)) {
+        userARatings = usersRatings[a];
+    } else {
+        for (int i = 0; i < movies; ++i) {
+            userARatings[i] = matrixUIInW[i][a];
+        }
+        usersRatings[a] = userARatings;
+    }
+
+    if (usersRatings.count(u)) {
+        userURatings = usersRatings[u];
+    } else {
+        for (int i = 0; i < movies; ++i) {
+            userURatings[i] = matrixUIInW[i][u];
+        }
+        usersRatings[u] = userURatings;
+    }
+
+
+    //Encontrar ratings promedio del usuario a.
+    double aAvg = 0.0;
+    if (averages[a] == -1.0) {
+        double contRatA = 0.0;
+        for (int i = 0; i < movies; ++i) {
+            if (userARatings[i] != 0) {
+                aAvg += userARatings[i];
+                contRatA += 1.0;
+            }
+        }
+        aAvg = aAvg / contRatA;
+        averages[a] = aAvg;
+    } else {
+        aAvg = averages[a];
+    }
+
+    //Encontrar ratings promedio del usuario u.
+    double uAvg = 0.0;
+    if (averages[u] == -1.0) {
+        double contRatU = 0.0;
+        for (int j = 0; j < movies; ++j) {
+            if (userURatings[j] != 0) {
+                uAvg += userURatings[j];
+                contRatU += 1.0;
+            }
+        }
+        uAvg = uAvg / contRatU;
+        averages[u] = uAvg;
+    } else {
+        uAvg = averages[u];
+    }
+
+    //Calcular el primer término del denominador.
+    double denomFirstTerm = 0.0;
+    if (corrTerms[a] == -1.0) {
+        for (int i = 0; i < movies; ++i) {
+            if (userARatings[i] != 0) {
+                denomFirstTerm += pow((userARatings[i] - aAvg), 2);
+            }
+        }
+        denomFirstTerm = sqrt(denomFirstTerm);
+        corrTerms[a] = denomFirstTerm; //Se almacena ese término para no tener
+        //que volverlo a calcular.
+    } else {
+        denomFirstTerm = corrTerms[a];
+    }
+
+    //Calcular el segundo término del denominador.
+    double denomSecondTerm = 0.0;
+    if (corrTerms[u] == -1.0) {
+        for (int j = 0; j < movies; ++j) {
+            if (userURatings[j] != 0) {
+                denomSecondTerm += pow((userURatings[j] - uAvg), 2);
+            }
+        }
+        denomSecondTerm = sqrt(denomSecondTerm);
+        corrTerms[u] = denomSecondTerm; //Se almacena ese término para no tener
+        //que volverlo a calcular.
+    } else {
+        denomSecondTerm = corrTerms[u];
+    }
+
+    //Calcular el denominador completo.
+    double denominator = denomFirstTerm * denomSecondTerm;
+
+    //Calular el numerador completo.
+    double numerator = 0.0;
+    for (int i = 0; i < movies; ++i) {
+        //Solamente se incluirán aquellas películas que ambos hayan visto.
+        if (userARatings[i] != 0 && userURatings[i] != 0) {
+            numerator += ((userARatings[i] - aAvg) * (userURatings[i] - uAvg));
+        }
+    }
+
+    //Calcular el valor de correlación entre ambos usuarios.
+    double corrBtwAandU = numerator / denominator;
+
+    correlation.correlationAu = corrBtwAandU;
+
+    //INVIO DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
+    MPE_Log_event(SEND_START, 0, NULL);
+    MPI_Send(&correlation, 1, correlation_type, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+    MPE_Log_event(SEND_END, 0, NULL);
+
+    /*
+    MPE_Log_event(SEND_START, 0, NULL);
+    MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+    MPE_Log_event(SEND_END, 0, NULL);
+
+    MPE_Log_event(SEND_START, 0, NULL);
+    MPI_Send(&u, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+    MPE_Log_event(SEND_END, 0, NULL);
+
+    MPE_Log_event(SEND_START, 0, NULL);
+    MPI_Send(&corrBtwAandU, 1, MPI_DOUBLE, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+    MPE_Log_event(SEND_END, 0, NULL);
+    */
+}
 /**
  * riceve coppie fino alla fine dello stream
  * e tra una receive e l'altra crea oggetto correlazione ma non calcola
@@ -497,6 +621,24 @@ receiveUsersIndexesFromMaster() {
     MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
     MPE_Log_event(RECEIVE_END, 0, NULL);
 
+
+    map<int, int *> usersRatings;
+    double *averages = new double[users];
+    double *corrTerms = new double[users];
+    //Se inicializan los vectores que usarán los workers para poder
+    //enviar los coeficientes de correlación entre los usuarios.
+    int *userARatings = new int[movies];
+    int *userURatings = new int[movies];
+
+    for (int i = 0; i < users; ++i) {
+        //-1.0 en una posición indica que aún no se han calculado
+        //ni el promedio ni los términos para la correlación.
+        averages[i] = -1.0;
+        corrTerms[i] = -1.0;
+    }
+
+
+
     while (a != -1) {
         MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&u, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
@@ -505,7 +647,10 @@ receiveUsersIndexesFromMaster() {
 
         //Correlation correlation = Correlation (a, u, userARatingsInW, userURatingsInW);
         Correlation correlation = Correlation(a, u, 0);
-        corrToProc.push(correlation);
+        /**
+         * IMP3. calcola la correlazione mentre riceve i dati
+         * */
+        newProcessCorrelation(correlation, usersRatings, userARatings, userURatings, averages, corrTerms);
 
         //Pedir otro índice de usuario para procesar otra tarea.
         MPE_Log_event(RECEIVE_START, 0, NULL);
@@ -809,8 +954,11 @@ main(int argc, char *argv[]) {
         //Recibir las columnas de las matrices desde el master.
         receiveUsersIndexesFromMaster();
 
+        /**
+         * IMP.3 cerchiamo di farlo man mano che riceve i nodi
+         * */
         //Procesar los registros de la cola de correlaciones para enviárselos al master.
-        processCorrelations();
+        //processCorrelations();
 
         //Recibir las columnas de correlación por usuarios desde el master.
         receiveCorrColumnsFromMaster();
