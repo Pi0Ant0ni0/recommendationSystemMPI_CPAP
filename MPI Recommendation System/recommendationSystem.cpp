@@ -57,6 +57,8 @@ struct Correlation {
 };
 
 queue<Correlation> corrToProc;
+std::vector<Correlation> correlationReceived;
+
 
 struct Sort {
     int a;
@@ -311,7 +313,6 @@ receiveCorrValuesFromWorkers() {
 
         //RICEZIONE DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
         Correlation correlation;
-
         MPE_Log_event(SEND_START, 0, NULL);
         MPI_Recv(&correlation, 1, correlation_type, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(SEND_END, 0, NULL);
@@ -640,11 +641,10 @@ receiveUsersIndexesFromMaster() {
     for(int j=0; j<n_receive; j++){
         Correlation correlation;
         MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
+        MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPE_Log_event(RECEIVE_END, 0, NULL);
-        newProcessCorrelation(correlation, usersRatings, userARatings, userURatings, averages, corrTerms);
+        corrToProc.push(correlation);
     }
-
 }
 /**
  * Manda tutte le possibili coppie di utenti
@@ -669,7 +669,6 @@ sendUsersIndexesToWorkers() {
             MPE_Log_event(SEND_START, 0, NULL);
             MPI_Send(&correlation, 1, correlation_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
             MPE_Log_event(SEND_END, 0, NULL);
-
             combinatorialFactor++;
             nextWorker();
         }
@@ -934,7 +933,7 @@ main(int argc, char *argv[]) {
          * IMP.3 cerchiamo di farlo man mano che riceve i nodi
          * */
         //Procesar los registros de la cola de correlaciones para enviárselos al master.
-        //processCorrelations();
+        processCorrelations();
 
         //Recibir las columnas de correlación por usuarios desde el master.
         receiveCorrColumnsFromMaster();
