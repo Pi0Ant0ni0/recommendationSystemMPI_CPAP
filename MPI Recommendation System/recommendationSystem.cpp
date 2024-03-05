@@ -615,12 +615,6 @@ void
  * */
 void
 receiveUsersIndexesFromMaster() {
-    int a; //Índice del usuario base.
-    int u; //Índice del otro usuario.
-    MPE_Log_event(RECEIVE_START, 0, NULL);
-    MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-    MPE_Log_event(RECEIVE_END, 0, NULL);
-
 
     map<int, int *> usersRatings;
     double *averages = new double[users];
@@ -638,23 +632,19 @@ receiveUsersIndexesFromMaster() {
     }
 
 
+    Correlation correlation;
+    MPE_Log_event(RECEIVE_START, 0, NULL);
+    MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
+    MPE_Log_event(RECEIVE_END, 0, NULL);
+    while (correlation.a != -1) {
 
-    while (a != -1) {
-        MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&u, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-        MPE_Log_event(RECEIVE_END, 0, NULL);
-
-
-        //Correlation correlation = Correlation (a, u, userARatingsInW, userURatingsInW);
-        Correlation correlation = Correlation(a, u, 0);
         /**
          * IMP3. calcola la correlazione mentre riceve i dati
          * */
         newProcessCorrelation(correlation, usersRatings, userARatings, userURatings, averages, corrTerms);
 
-        //Pedir otro índice de usuario para procesar otra tarea.
         MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
+        MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
 
     }
@@ -678,12 +668,9 @@ sendUsersIndexesToWorkers() {
         for (int j = i + 1; j < users; ++j) {
             a = i;  //Índice del usuario a.
             u = j;  //Índice del usuario u.
+            Correlation correlation = Correlation(a,u,0);
             MPE_Log_event(SEND_START, 0, NULL);
-            MPI_Send(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-            MPE_Log_event(SEND_END, 0, NULL);
-
-            MPE_Log_event(SEND_START, 0, NULL);
-            MPI_Send(&u, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
+            MPI_Send(&correlation, 1, correlation_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
             MPE_Log_event(SEND_END, 0, NULL);
 
             combinatorialFactor++;
@@ -691,10 +678,10 @@ sendUsersIndexesToWorkers() {
         }
     }
 
-    int finishCode = -1; //Sirve para indicar a los workers que ya se finalizó con el envío de tareas.
     for (int i = 1; i <= numWorkers; ++i) {
+        Correlation correlation = Correlation(-1,-1,0);
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&finishCode, 1, MPI_INT, i, FROM_MASTER, MPI_COMM_WORLD);
+        MPI_Send(&correlation, 1, correlation_type, i, FROM_MASTER, MPI_COMM_WORLD);
         MPE_Log_event(SEND_END, 0, NULL);
 
     }
