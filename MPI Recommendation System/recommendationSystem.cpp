@@ -631,23 +631,20 @@ receiveUsersIndexesFromMaster() {
         corrTerms[i] = -1.0;
     }
 
+    int n_pairs = (users* (users-1))/2;
+    int n_receive = n_pairs/numWorkers;
+    if(taskId<= (n_pairs)%numWorkers){
+        n_receive++;
+    }
 
-    Correlation correlation;
-    MPE_Log_event(RECEIVE_START, 0, NULL);
-    MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-    MPE_Log_event(RECEIVE_END, 0, NULL);
-    while (correlation.a != -1) {
-
-        /**
-         * IMP3. calcola la correlazione mentre riceve i dati
-         * */
-        newProcessCorrelation(correlation, usersRatings, userARatings, userURatings, averages, corrTerms);
-
+    for(int j=0; j<n_receive; j++){
+        Correlation correlation;
         MPE_Log_event(RECEIVE_START, 0, NULL);
         MPI_Recv(&correlation, 1, correlation_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
-
+        newProcessCorrelation(correlation, usersRatings, userARatings, userURatings, averages, corrTerms);
     }
+
 }
 /**
  * Manda tutte le possibili coppie di utenti
@@ -676,14 +673,6 @@ sendUsersIndexesToWorkers() {
             combinatorialFactor++;
             nextWorker();
         }
-    }
-
-    for (int i = 1; i <= numWorkers; ++i) {
-        Correlation correlation = Correlation(-1,-1,0);
-        MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&correlation, 1, correlation_type, i, FROM_MASTER, MPI_COMM_WORLD);
-        MPE_Log_event(SEND_END, 0, NULL);
-
     }
     currentWorker = 0;
 }
