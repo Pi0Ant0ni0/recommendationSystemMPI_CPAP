@@ -30,7 +30,7 @@ int BROADCAST_START, BROADCAST_END, SEND_START, SEND_END, RECEIVE_START, RECEIVE
 int taskId, numTasks, numWorkers, currentWorker = 0;
 MPI_Status status;
 MPI_Request request;
-MPI_Datatype correlation_type;
+MPI_Datatype correlation_type, correlation_column_type;
 
 /*Variables propias*/
 int movies, users, recommendations;
@@ -56,9 +56,17 @@ struct Correlation {
     Correlation(int userA, int userU, double corrAU) : a(userA), u(userU), correlationAu(corrAU) {}
 };
 
-queue<Correlation> corrToProc;
-std::vector<Correlation> correlationReceived;
 
+struct CorrelationColumn {
+    int a;
+    double* userACorr;
+
+    CorrelationColumn(int userACorrSize) : a(0), userACorr(new double [userACorrSize]) {}
+
+    CorrelationColumn(int userA, double* correlation) : a(userA), userACorr(correlation) {}
+};
+
+queue<Correlation> corrToProc;
 
 struct Sort {
     int a;
@@ -232,34 +240,28 @@ sortCorrelations() {
  * */
 void
 receiveCorrColumnsFromMaster() {
-    int a; //Índice del usuario base.
-    double *userACorrValues;
     pair<double, int> corrAndUser;
-    MPE_Log_event(RECEIVE_START, 0, NULL);
-    MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-    MPE_Log_event(RECEIVE_END, 0, NULL);
 
-    while (a != -1) {
-        vector<pair<double, int> > corrsVector;
-        userACorrValues = new double[users];
+    int n_receives = users/numWorkers;
+    if(taskId<= n_receives%numWorkers){
+        n_receives++;
+    }
+
+    for(int j=0; j<n_receives; j++){
+        CorrelationColumn correlationColumn = CorrelationColumn(users);
         MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&userACorrValues[0], users, MPI_DOUBLE, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
+        MPI_Recv(&correlationColumn, 1, correlation_column_type, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
         MPE_Log_event(RECEIVE_END, 0, NULL);
+        vector<pair<double, int> > corrsVector;
 
         for (int i = 0; i < users; ++i) {
             //Se guarda el coeficiente de correlación acompañado de su usuario asociado.
-            corrAndUser = make_pair(userACorrValues[i], i);
+            corrAndUser = make_pair(correlationColumn.userACorr[i], i);
             corrsVector.push_back(corrAndUser);
         }
 
-        Sort corrSort = Sort(a, corrsVector);
+        Sort corrSort = Sort(correlationColumn.a, corrsVector);
         corrToSort.push(corrSort);
-
-        //Pedir otro índice de usuario para procesar otra tarea.
-        MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-        MPE_Log_event(RECEIVE_END, 0, NULL);
-
     }
 }
 /**per ogni utente invia ad anello
@@ -273,27 +275,15 @@ sendCorrColumnsToWorkers() {
     int a;
     for (int i = 0; i < users; ++i) {
         a = i;  //Índice del usuario a.
-        MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-        MPE_Log_event(SEND_END, 0, NULL);
-
         for (int j = 0; j < users; ++j) {
             userACorrs[j] = userUserMatrix[j][a];
         }
-        MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&userACorrs[0], users, MPI_DOUBLE, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
-        MPE_Log_event(SEND_END, 0, NULL);
 
+        CorrelationColumn correlationColumn = CorrelationColumn(a,userACorrs);
+        MPE_Log_event(SEND_START, 0, NULL);
+        MPI_Send(&correlationColumn, 1, correlation_column_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
+        MPE_Log_event(SEND_END, 0, NULL);
         nextWorker();
-    }
-
-    int finishCode = -1; //Sirve para indicar a los workers que ya
-    //se finalizó con el envío de tareas.
-    for (int i = 1; i <= numWorkers; ++i) {
-        MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&finishCode, 1, MPI_INT, i, FROM_MASTER, MPI_COMM_WORLD);
-        MPE_Log_event(SEND_END, 0, NULL);
-
     }
     currentWorker = 0;
 }
@@ -313,6 +303,7 @@ receiveCorrValuesFromWorkers() {
 
         //RICEZIONE DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
         Correlation correlation;
+
         MPE_Log_event(SEND_START, 0, NULL);
         MPI_Recv(&correlation, 1, correlation_type, currentWorker, FROM_WORKER, MPI_COMM_WORLD, &status);
         MPE_Log_event(SEND_END, 0, NULL);
@@ -485,130 +476,6 @@ processCorrelations() {
 
     }
 }
-void
- newProcessCorrelation(Correlation correlation, map<int, int *>& usersRatings, int* userARatings, int* userURatings,double* averages,double* corrTerms){
-
-
-    int a = correlation.a;
-    int u = correlation.u;
-
-    if (usersRatings.count(a)) {
-        userARatings = usersRatings[a];
-    } else {
-        for (int i = 0; i < movies; ++i) {
-            userARatings[i] = matrixUIInW[i][a];
-        }
-        usersRatings[a] = userARatings;
-    }
-
-    if (usersRatings.count(u)) {
-        userURatings = usersRatings[u];
-    } else {
-        for (int i = 0; i < movies; ++i) {
-            userURatings[i] = matrixUIInW[i][u];
-        }
-        usersRatings[u] = userURatings;
-    }
-
-
-    //Encontrar ratings promedio del usuario a.
-    double aAvg = 0.0;
-    if (averages[a] == -1.0) {
-        double contRatA = 0.0;
-        for (int i = 0; i < movies; ++i) {
-            if (userARatings[i] != 0) {
-                aAvg += userARatings[i];
-                contRatA += 1.0;
-            }
-        }
-        aAvg = aAvg / contRatA;
-        averages[a] = aAvg;
-    } else {
-        aAvg = averages[a];
-    }
-
-    //Encontrar ratings promedio del usuario u.
-    double uAvg = 0.0;
-    if (averages[u] == -1.0) {
-        double contRatU = 0.0;
-        for (int j = 0; j < movies; ++j) {
-            if (userURatings[j] != 0) {
-                uAvg += userURatings[j];
-                contRatU += 1.0;
-            }
-        }
-        uAvg = uAvg / contRatU;
-        averages[u] = uAvg;
-    } else {
-        uAvg = averages[u];
-    }
-
-    //Calcular el primer término del denominador.
-    double denomFirstTerm = 0.0;
-    if (corrTerms[a] == -1.0) {
-        for (int i = 0; i < movies; ++i) {
-            if (userARatings[i] != 0) {
-                denomFirstTerm += pow((userARatings[i] - aAvg), 2);
-            }
-        }
-        denomFirstTerm = sqrt(denomFirstTerm);
-        corrTerms[a] = denomFirstTerm; //Se almacena ese término para no tener
-        //que volverlo a calcular.
-    } else {
-        denomFirstTerm = corrTerms[a];
-    }
-
-    //Calcular el segundo término del denominador.
-    double denomSecondTerm = 0.0;
-    if (corrTerms[u] == -1.0) {
-        for (int j = 0; j < movies; ++j) {
-            if (userURatings[j] != 0) {
-                denomSecondTerm += pow((userURatings[j] - uAvg), 2);
-            }
-        }
-        denomSecondTerm = sqrt(denomSecondTerm);
-        corrTerms[u] = denomSecondTerm; //Se almacena ese término para no tener
-        //que volverlo a calcular.
-    } else {
-        denomSecondTerm = corrTerms[u];
-    }
-
-    //Calcular el denominador completo.
-    double denominator = denomFirstTerm * denomSecondTerm;
-
-    //Calular el numerador completo.
-    double numerator = 0.0;
-    for (int i = 0; i < movies; ++i) {
-        //Solamente se incluirán aquellas películas que ambos hayan visto.
-        if (userARatings[i] != 0 && userURatings[i] != 0) {
-            numerator += ((userARatings[i] - aAvg) * (userURatings[i] - uAvg));
-        }
-    }
-
-    //Calcular el valor de correlación entre ambos usuarios.
-    double corrBtwAandU = numerator / denominator;
-
-    correlation.correlationAu = corrBtwAandU;
-
-    //INVIO DI UN SOLO MSG CON IL TIPO COMPOSTO DA INT, INT E DOUBLE
-    MPE_Log_event(SEND_START, 0, NULL);
-    MPI_Send(&correlation, 1, correlation_type, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-    MPE_Log_event(SEND_END, 0, NULL);
-
-    /*
-    MPE_Log_event(SEND_START, 0, NULL);
-    MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-    MPE_Log_event(SEND_END, 0, NULL);
-
-    MPE_Log_event(SEND_START, 0, NULL);
-    MPI_Send(&u, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-    MPE_Log_event(SEND_END, 0, NULL);
-
-    MPE_Log_event(SEND_START, 0, NULL);
-    MPI_Send(&corrBtwAandU, 1, MPI_DOUBLE, MASTER, FROM_WORKER, MPI_COMM_WORLD);
-    MPE_Log_event(SEND_END, 0, NULL);
-    */
-}
 /**
  * riceve coppie fino alla fine dello stream
  * e tra una receive e l'altra crea oggetto correlazione ma non calcola
@@ -616,22 +483,6 @@ void
  * */
 void
 receiveUsersIndexesFromMaster() {
-
-    map<int, int *> usersRatings;
-    double *averages = new double[users];
-    double *corrTerms = new double[users];
-    //Se inicializan los vectores que usarán los workers para poder
-    //enviar los coeficientes de correlación entre los usuarios.
-    int *userARatings = new int[movies];
-    int *userURatings = new int[movies];
-
-    for (int i = 0; i < users; ++i) {
-        //-1.0 en una posición indica que aún no se han calculado
-        //ni el promedio ni los términos para la correlación.
-        averages[i] = -1.0;
-        corrTerms[i] = -1.0;
-    }
-
     int n_pairs = (users* (users-1))/2;
     int n_receive = n_pairs/numWorkers;
     if(taskId<= (n_pairs)%numWorkers){
@@ -663,12 +514,11 @@ sendUsersIndexesToWorkers() {
     int a, u;
     for (int i = 0; i < users; ++i) {
         for (int j = i + 1; j < users; ++j) {
-            a = i;  //Índice del usuario a.
-            u = j;  //Índice del usuario u.
-            Correlation correlation = Correlation(a,u,0);
+            Correlation correlation = Correlation(i,j,0);
             MPE_Log_event(SEND_START, 0, NULL);
             MPI_Send(&correlation, 1, correlation_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
             MPE_Log_event(SEND_END, 0, NULL);
+
             combinatorialFactor++;
             nextWorker();
         }
@@ -844,12 +694,29 @@ void define_mpi_data_types() {
     MPI_Type_create_struct(3, lengths, displacements, types, &correlation_type);
     MPI_Type_commit(&correlation_type);
 
+
+    int correlation_column_lengths[2] = { 1, users};
+    MPI_Aint correlation_column_displacements[2];
+    CorrelationColumn dummy_correlation_column(users);
+    MPI_Aint correlation_column_base_address;
+
+    MPI_Get_address(&dummy_correlation_column, &correlation_column_base_address);
+    MPI_Get_address(&dummy_correlation_column.a, &correlation_column_displacements[0]);
+    MPI_Get_address(&dummy_correlation_column.userACorr[0], &correlation_column_displacements[1]);
+    correlation_column_displacements[0] = MPI_Aint_diff(correlation_column_displacements[0], correlation_column_base_address);
+    correlation_column_displacements[1] = MPI_Aint_diff(correlation_column_displacements[1], correlation_column_base_address);
+
+    MPI_Datatype correlation_column_types[2] = { MPI_INT, MPI_DOUBLE};
+    MPI_Type_create_struct(2, correlation_column_lengths, correlation_column_displacements, correlation_column_types, &correlation_column_type);
+    MPI_Type_commit(&correlation_column_type);
+
 }
 
 int
 main(int argc, char *argv[]) {
 
     initMPI(argc, argv);
+    users = atoi(argv[5]);
     define_mpi_data_types();
     double startTime = MPI_Wtime();
 
@@ -874,7 +741,6 @@ main(int argc, char *argv[]) {
         matrixSRFile = argv[2];
         matrixRecMovsFile = argv[3];
         movies = atoi(argv[4]);
-        users = atoi(argv[5]);
         recommendations = atoi(argv[6]);
 
         printf("Processing...\n");
@@ -929,9 +795,6 @@ main(int argc, char *argv[]) {
         //Recibir las columnas de las matrices desde el master.
         receiveUsersIndexesFromMaster();
 
-        /**
-         * IMP.3 cerchiamo di farlo man mano che riceve i nodi
-         * */
         //Procesar los registros de la cola de correlaciones para enviárselos al master.
         processCorrelations();
 
