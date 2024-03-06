@@ -233,11 +233,16 @@ receiveCorrColumnsFromMaster() {
     int a; //Índice del usuario base.
     double *userACorrValues;
     pair<double, int> corrAndUser;
-    MPE_Log_event(RECEIVE_START, 0, NULL);
-    MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-    MPE_Log_event(RECEIVE_END, 0, NULL);
 
-    while (a != -1) {
+    int n_receive = users / numWorkers;
+    if(taskId<=users % numWorkers){
+        n_receive++;
+    }
+    MPI_Request a_request;
+    for(int j=0; j<n_receive; j++){
+        MPE_Log_event(RECEIVE_START, 0, NULL);
+        MPI_Irecv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &a_request);
+        MPE_Log_event(RECEIVE_END, 0, NULL);
         vector<pair<double, int> > corrsVector;
         userACorrValues = new double[users];
         MPE_Log_event(RECEIVE_START, 0, NULL);
@@ -250,13 +255,9 @@ receiveCorrColumnsFromMaster() {
             corrsVector.push_back(corrAndUser);
         }
 
+        MPI_Wait(&a_request, MPI_STATUS_IGNORE);
         Sort corrSort = Sort(a, corrsVector);
         corrToSort.push(corrSort);
-
-        //Pedir otro índice de usuario para procesar otra tarea.
-        MPE_Log_event(RECEIVE_START, 0, NULL);
-        MPI_Recv(&a, 1, MPI_INT, MASTER, FROM_MASTER, MPI_COMM_WORLD, &status);
-        MPE_Log_event(RECEIVE_END, 0, NULL);
 
     }
 }
@@ -285,14 +286,6 @@ sendCorrColumnsToWorkers() {
         nextWorker();
     }
 
-    int finishCode = -1; //Sirve para indicar a los workers que ya
-    //se finalizó con el envío de tareas.
-    for (int i = 1; i <= numWorkers; ++i) {
-        MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&finishCode, 1, MPI_INT, i, FROM_MASTER, MPI_COMM_WORLD);
-        MPE_Log_event(SEND_END, 0, NULL);
-
-    }
     currentWorker = 0;
 }
 /**
