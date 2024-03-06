@@ -209,15 +209,15 @@ sortCorrelations() {
             moviesToRecToA[i] = uMovieToRecA;
         }
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPI_Isend(&a, 1, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD,&request);
         MPE_Log_event(SEND_END, 0, NULL);
 
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&recUsers[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPI_Isend(&recUsers[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD,&request);
         MPE_Log_event(SEND_END, 0, NULL);
 
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&moviesToRecToA[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD);
+        MPI_Isend(&moviesToRecToA[0], recommendations, MPI_INT, MASTER, FROM_WORKER, MPI_COMM_WORLD,&request);
         MPE_Log_event(SEND_END, 0, NULL);
 
     }
@@ -273,14 +273,14 @@ sendCorrColumnsToWorkers() {
     for (int i = 0; i < users; ++i) {
         a = i;  //Índice del usuario a.
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
+        MPI_Isend(&a, 1, MPI_INT, currentWorker, FROM_MASTER, MPI_COMM_WORLD,&request);
         MPE_Log_event(SEND_END, 0, NULL);
 
         for (int j = 0; j < users; ++j) {
             userACorrs[j] = userUserMatrix[j][a];
         }
         MPE_Log_event(SEND_START, 0, NULL);
-        MPI_Send(&userACorrs[0], users, MPI_DOUBLE, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
+        MPI_Isend(&userACorrs[0], users, MPI_DOUBLE, currentWorker, FROM_MASTER, MPI_COMM_WORLD,&request);
         MPE_Log_event(SEND_END, 0, NULL);
 
         nextWorker();
@@ -517,7 +517,7 @@ sendUsersIndexesToWorkers() {
         for (int j = i + 1; j < users; ++j) {
             Correlation correlation = Correlation(i,j,0);
             MPE_Log_event(SEND_START, 0, NULL);
-            MPI_Send(&correlation, 1, correlation_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD);
+            MPI_Isend(&correlation, 1, correlation_type, currentWorker, FROM_MASTER, MPI_COMM_WORLD,&request);
             MPE_Log_event(SEND_END, 0, NULL);
 
             combinatorialFactor++;
